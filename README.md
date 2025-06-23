@@ -2,6 +2,15 @@
 CT-Based Biomechanical Tumor Growth Model for Mesothelioma
 
 
+Tumor Mesh Generation Pipeline
+mesh.py generates a high-quality tetrahedral volume mesh from a tumor segmentation (in NIfTI format), preparing it for biomechanical modeling and finite element simulation. It includes:
+
+* Surface extraction from segmentation
+* Mesh simplification and repair
+* Volume meshing with GMSH
+* Exporting to .msh and .vtk for simulation use
+
+
 remeshing.py: provides tools to process 3D point clouds (e.g., from medical image segmentations or tumor surfaces) into high-quality surface or volumetric meshes suitable for simulation, visualization, or further processing. It includes methods for alpha shape and Poisson surface reconstruction, as well as .geo file export for use with GMSH.
 
 * write_geo_from_points(...): Generates a 2D triangulated .geo file from sparse 3D points, using Delaunay triangulation and spatial connectivity. This is useful for generating surface loops and volume definitions in GMSH.
