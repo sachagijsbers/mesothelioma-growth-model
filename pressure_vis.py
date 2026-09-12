@@ -3,7 +3,7 @@ import numpy as np
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
 # Load pressure data from a npy file
-pressure = np.load('pressure_data.npy')
+pressure = np.load('pressure.npy')  # written by model_implementation.py
 
 def plot_hist_pressure(pressure):
     """

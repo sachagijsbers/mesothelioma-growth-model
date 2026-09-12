@@ -484,12 +484,16 @@ def updated_density_with_border_sampling_and_interpolation(ct_scan_path, seg_mas
 
     return updated_vertex_density
 
+# --- Input files ---
+ct_scan_path = "CT_scan.nii.gz"         # thorax CT scan (NIfTI)
+seg_mask_path = "Segmentation.nii.gz"   # tumour segmentation mask, same space as the CT
+
 # --- Load tumor mesh ---
-mesh = mesh_load("tumor_final")
+mesh = mesh_load("tumor")  # tumor.msh, written by mesh_generation.py
 
 # Compute average density in tumor at vertices
 print("[INFO] Calculating average density in tumor at mesh vertices...")
-density = avg_density_in_tumor_at_vertices_new(ct_scan_path, seg_mask_path, mesh)
+density = avg_density_in_tumor_at_vertices(ct_scan_path, seg_mask_path, mesh)
 # plot_density_on_vertices(mesh.geometry.x, density)
 
 relaxation_steps = 5
@@ -501,7 +505,10 @@ mu, lam = material_property(E, nu)  # Define the material properties (mu, lam)
 k = 5000 # a scaling constant (e.g. 1000–5000 to get Pascals)
 rho0 = 1.0 # Reference pressure (Pa)
 
-for i in range(0, 3):
+# Steps > 1 reload "bulged_mesh_new", which requires the GMSH remeshing step at the end of the loop
+n_growth_steps = 1
+
+for i in range(0, n_growth_steps):
     if i > 0:
         mesh_new = mesh_load("bulged_mesh_new")
         new_density = avg_density_in_tumor_at_vertices(ct_scan_path, seg_mask_path, mesh_new)
@@ -626,7 +633,7 @@ for i in range(0, 3):
         print(f"[INFO] {len(seed_indices)} seed points selected (threshold = {displacement_threshold}).")
 
         if len(seed_indices) == 0:
-            return original_points.copy(), []
+            return original_points.copy(), [], []
 
         tree = cKDTree(new_points)
         visited = np.zeros(len(new_points), dtype=bool)

@@ -1,0 +1,14 @@
+# DolfinX (fenics-dolfinx), petsc4py and mpi4py are best installed via conda-forge or Docker, see README
+numpy
+scipy
+matplotlib
+pandas
+nibabel
+scikit-image
+meshio
+gmsh
+trimesh
+open3d
+pymeshfix
+pyvista
+imageio

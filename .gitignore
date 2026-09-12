@@ -1,0 +1,20 @@
+# Patient imaging data must never be committed
+*.nii
+*.nii.gz
+*.dcm
+
+# Generated meshes and results
+*.msh
+*.vtk
+*.stl
+*.xdmf
+*.h5
+*.geo
+*.npy
+*.csv
+*.png
+
+# Python / OS
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store

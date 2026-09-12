@@ -2,9 +2,10 @@ import nibabel as nib
 from skimage.measure import marching_cubes
 import meshio
 import gmsh
+import trimesh
 
 # Load segmentation and CT data
-segmentation = nib.load("segmentation.nii.gz")
+segmentation = nib.load("Segmentation.nii.gz")
 
 # Get geometry information
 spacing = segmentation.header.get_zooms()  

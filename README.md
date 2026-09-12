@@ -1,85 +1,99 @@
 # Mesothelioma Growth Model
-## CT-Based Biomechanical Tumor Growth Simulation Using Finite Element Modeling
-This project provides a complete biomechanical modeling pipeline to simulate and analyze the growth of mesothelioma, a cancer typically forming in the pleura surrounding the lungs. The model uses CT imaging data and tumor segmentations to apply tissue-density-informed internal forces and simulate tumor deformation and growth patterns.
 
-## Overview
-The model simulates tumor deformation using linear elasticity in DolfinX, guided by tissue density derived from CT scans. It integrates image-based geometry extraction, mesh processing, and finite element modeling to understand how mechanical forces—such as pressure from surrounding tissues—affect the direction and probability of tumor expansion.
+**CT-informed biomechanical simulation of mesothelioma tumour growth with the finite element method.**
 
-## What You Need
-To run the full pipeline, you will need:
-* A CT scan of the thorax (e.g., in NIfTI .nii.gz format)
-* A tumor segmentation mask (same space as CT)
+Malignant pleural mesothelioma grows as an irregular rind along the pleura, and where it expands next is shaped by the tissue around it. This project builds a pipeline from a thorax CT scan and a tumour segmentation to a patient-specific finite element model. Tissue density taken from the CT drives internal forces in a linear elastic tumour, and the resulting displacement field is used to flag regions where the tumour is most likely to bulge outward.
 
-### Python Environment
-You will need Python 3.10+ and the following packages:
-numpy
-scipy
-matplotlib
-pyvista
-meshio
-pandas
-open3d
-trimesh
-imageio
-nibabel
-scikit-image
-gmsh (CLI, for meshing)
-dolfinx (via Docker or compiled locally for FEM)
+`Python` · `DolfinX / FEniCSx` · `PETSc` · `GMSH` · `nibabel` · `scikit-image` · `Open3D` · `trimesh` · `PyVista`
 
-## Project Structure
-### Tumor Mesh Generation
-mesh_generation.py: generates a high-quality tetrahedral volume mesh from a tumor segmentation (in NIfTI format), preparing it for biomechanical modeling and finite element simulation. It includes:
+---
 
-* Surface extraction from segmentation
-* Mesh simplification and repair
-* Volume meshing with GMSH
-* Exporting to .msh and .vtk for simulation use
+## Pipeline
 
-### Tumor Remeshing
-remeshing.py: provides tools to process 3D point clouds (e.g., from medical image segmentations or tumor surfaces) into high-quality surface or volumetric meshes suitable for simulation, visualization, or further processing. It includes methods for alpha shape and Poisson surface reconstruction, as well as .geo file export for use with GMSH.
+```mermaid
+flowchart LR
+    A[CT scan + segmentation<br/>NIfTI] --> B[mesh_generation.py<br/>marching cubes → STL → GMSH tetra mesh]
+    B --> C[model_implementation.py<br/>HU → density → pressure → FEM solve]
+    A --> C
+    C --> D[displacements, growth probabilities,<br/>bulge points  .npy / .csv]
+    D --> E[new_point_vis.py<br/>pressure_vis.py]
+    A --> F[density_vis.py]
+    D -. optional .-> G[remeshing.py<br/>alpha shape / Poisson reconstruction]
+```
 
-* write_geo_from_points(...): Generates a 2D triangulated .geo file from sparse 3D points, using Delaunay triangulation and spatial connectivity. This is useful for generating surface loops and volume definitions in GMSH.
+## Model
 
-* generate_alpha_mesh(...): Constructs a smooth watertight triangle mesh from a point cloud using Open3D's alpha shape reconstruction. Includes optional voxel downsampling, smoothing, simplification, and manifold repair via MeshFix.
+**1. Geometry.** The segmentation mask is turned into a surface with marching cubes (using the voxel spacing), simplified and repaired with `trimesh`, and meshed into linear tetrahedra with GMSH (Netgen optimisation).
 
-* poisson_surface_reconstruction(...): Uses Poisson surface reconstruction to create a watertight mesh from a point cloud with normals. Optionally downsamples points, cleans up the mesh, and exports as STL.
+**2. Tissue density.** CT intensities are converted to Hounsfield units using the NIfTI slope and intercept, then mapped to an approximate mass density
 
-### MAIN PIPELINE: Biomechanical Simulation
-This project simulates the deformation of a tumor mesh using CT-derived density-based internal forces via linear elasticity in DolfinX. The main model loop can be found in fenicsx_model_implementation.py. It incorporates:
+$$\rho = \max\left(\frac{\mathrm{HU} + 1000}{1000},\ 0\right)\ \ \mathrm{g/cm^3}$$
 
-* Directionally resolved force vectors computed from CT-scan tissue density.
-* Application of density-dependent pressure to the tumor boundary.
-* Iterative solution of the elasticity problem using FEM.
-* Detection and propagation of displacement-driven tumor bulges.
-* Export of results including displacements, probabilities, and bulge regions.
-* Optional GMSH remeshing of the displaced tumor geometry.
+and averaged over a small voxel neighbourhood around every mesh vertex.
 
+**3. Density-driven load.** Denser tissue pushes harder. At each vertex a pressure is computed and applied as a body force, directed towards the nearest boundary for interior vertices and inward for boundary vertices:
 
-### Visualisations & Analysis
+$$p = k \cdot \max(\rho - \rho_0,\ 0), \qquad \mathbf{f} = p\,\hat{\mathbf{d}}$$
 
-#### Tumor Density Visualization and Analysis from CT Scans
-density_vis.py contains Python scripts to visualize tumor density overlays and histograms from CT scans and segmentation masks using NIfTI files.
+with $k = 5000$ and $\rho_0 = 1.0$.
 
-* Overlay tumor density on CT axial slices
-* Apply 5×5 neighborhood smoothing to enhance visualization
-* Zoom into regions of interest
-* Generate annotated density histograms for whole scan and tumor region
-* Save outputs as high-quality PNG images and export HU data
+**4. Linear elasticity.** The displacement $\mathbf{u}$ solves
 
-#### Pressure Distributions Analysis
-pressure_vis.py provides tools to analyze and visualize pressure data derived from biomechanical modeling or CT-based simulations. It includes:
+$$-\nabla \cdot \boldsymbol{\sigma}(\mathbf{u}) = \mathbf{f}, \qquad \boldsymbol{\sigma} = \lambda\,\mathrm{tr}(\boldsymbol{\varepsilon})\,\mathbf{I} + 2\mu\,\boldsymbol{\varepsilon}, \qquad \boldsymbol{\varepsilon} = \tfrac{1}{2}(\nabla\mathbf{u} + \nabla\mathbf{u}^\top)$$
 
-* A histogram with a zoomed-in inset of the pressure distribution.
-* A plot showing how the mean pressure varies with a scaling constant k.
+with $E = 10^5$ Pa and $\nu = 0.3$. The tumour is anchored ($\mathbf{u} = 0$) at bone-like vertices ($\rho \geq 2.0$ g/cm³) and at the density-weighted centroid. The problem is discretised with P1 vector Lagrange elements in DolfinX and solved with conjugate gradients preconditioned by hypre BoomerAMG.
 
+**5. Growth regions.** Displacement magnitudes are min-max normalised to a per-vertex *growth probability*. Vertices displaced more than mean + 5 standard deviations seed a region-growing step that marks candidate bulges.
 
-#### Tumor Growth Probability Visualization
-new_point_vis.py visualizes tumor growth modeling data using a variety of interactive and static plots. It analyzes and displays growth probabilities, pressure correlations, and tumor displacement data derived from biomechanical simulations. The goal is to explore regions of high-growth probability and their relationship with mechanical stress (pressure) in a tumor mesh.
+## Repository structure
 
-## Applications
-This framework is useful for:
+| File | Purpose |
+|---|---|
+| `mesh_generation.py` | Segmentation → surface → repaired STL → tetrahedral mesh (`tumor.msh`, `.vtk`) |
+| `model_implementation.py` | Main model: density sampling, load assembly, FEM solve, growth probabilities, bulge detection |
+| `remeshing.py` | Point cloud → watertight mesh (Open3D alpha shapes, Poisson reconstruction, MeshFix) and `.geo` export for GMSH |
+| `density_vis.py` | CT slices with tumour density overlay, HU histograms for the whole scan vs. the tumour |
+| `pressure_vis.py` | Pressure distribution and sensitivity of the mean pressure to the scaling constant $k$ |
+| `new_point_vis.py` | Growth probability histogram, pressure vs. probability, 3D overlay of predicted bulge points |
 
-* Preclinical studies of mesothelioma growth mechanics
-* In silico simulations of tumor stress and morphology
-* Augmenting radiological analysis with biomechanical insight
-* Testing intervention scenarios (e.g., how tissue stiffness affects growth)
+## Getting started
+
+DolfinX is easiest to install via conda or Docker; the other dependencies are in `requirements.txt`.
+
+```bash
+conda create -n meso -c conda-forge python=3.11 fenics-dolfinx mpich pyvista
+conda activate meso
+pip install -r requirements.txt
+```
+
+Place the input files in the working directory and run the steps in order:
+
+```text
+CT_scan.nii.gz        thorax CT scan
+Segmentation.nii.gz   tumour mask in the same space as the CT
+```
+
+```bash
+python mesh_generation.py        # -> tumor.msh
+python model_implementation.py   # -> pressure.npy, displacement_vectors.npy, probabilities.npy, bulge_points.npy
+python new_point_vis.py          # figures
+python pressure_vis.py
+python density_vis.py
+```
+
+### Data
+
+No imaging data is included. Patient CT scans are privacy-sensitive and cannot be shared here; the pipeline expects your own NIfTI files.
+
+## Limitations and next steps
+
+This is a research prototype, not a validated clinical tool.
+
+- **Mechanics.** Small-strain linear elasticity with homogeneous material parameters; real tumour and pleural tissue is heterogeneous, nonlinear and actively growing.
+- **Density → pressure.** The HU-to-density and density-to-pressure mappings are heuristic, and results depend on the scaling constant $k$ (see `pressure_vis.py`).
+- **"Probability".** The growth probability is a normalised displacement magnitude, not a calibrated probability.
+- **Validation.** Predictions are not compared against follow-up scans in this repository.
+- **Coordinates.** Vertex positions (in mm) and CT voxel indices are matched without applying the full image affine; this should be unified before quantitative use.
+- **Iterative growth.** Multi-step growth requires remeshing the bulged geometry after each step. This is not wired into the loop yet, so `n_growth_steps = 1`.
+
+Possible extensions: calibrate against longitudinal scans, hyperelastic or growth-coupled (morphoelastic) material models, and sensitivity or uncertainty analysis over $E$, $\nu$ and $k$.
