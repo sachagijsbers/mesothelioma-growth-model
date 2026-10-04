@@ -2,6 +2,8 @@
 
 **CT-informed biomechanical simulation of mesothelioma tumour growth with the finite element method.**
 
+> **This is my MSc thesis model (2025), kept as it was.** It computes a single deformation step. I later revisited the unfinished part, iterative geometry evolution, in **[mesothelioma-iterative-growth](https://github.com/sachagijsbers/mesothelioma-iterative-growth)**: prescribed growth, CT-derived tissue stiffness and a controlled experiment. The thesis version is tagged [`msc-thesis-2025`](https://github.com/sachagijsbers/mesothelioma-growth-model/tree/msc-thesis-2025).
+
 Malignant pleural mesothelioma grows as an irregular rind along the pleura, and where it expands next is shaped by the tissue around it. This project builds a pipeline from a thorax CT scan and a tumour segmentation to a patient-specific finite element model. Tissue density taken from the CT drives internal forces in a linear elastic tumour, and the resulting displacement field is used to flag regions where the tumour is most likely to bulge outward.
 
 `Python` · `DolfinX / FEniCSx` · `PETSc` · `GMSH` · `nibabel` · `scikit-image` · `Open3D` · `trimesh` · `PyVista`
@@ -83,7 +85,7 @@ python density_vis.py
 
 ### Data
 
-No imaging data is included. Patient CT scans are privacy-sensitive and cannot be shared here; the pipeline expects your own NIfTI files.
+No imaging data is included. The CT scans come from the public *COVID-19 CT Lung and Infection Segmentation Dataset* (Ma et al., 2020): https://zenodo.org/records/3757476 ([doi:10.5281/zenodo.3757476](https://doi.org/10.5281/zenodo.3757476)), licence CC BY-NC-SA. Download them from the source; the pipeline expects NIfTI files.
 
 ## Limitations and next steps
 
